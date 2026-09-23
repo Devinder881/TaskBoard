@@ -10,101 +10,93 @@ import {
   faTrash,
 } from "@fortawesome/free-solid-svg-icons";
 
-// ---------- shared time helpers ----------
-const clampUnit = (n) => Math.min(59, Math.max(0, Number.isNaN(n) ? 0 : n));
+const STORAGE_KEY = "taskboard-tasks";
 
+// ---------- time helpers ----------
+const clampUnit = (n) => Math.min(59, Math.max(0, Number.isNaN(n) ? 0 : n));
 const toHMS = (totalSeconds) => {
   const s = Math.max(0, Math.floor(totalSeconds));
-  return {
-    h: clampUnit(Math.floor(s / 3600)),
-    m: clampUnit(Math.floor((s % 3600) / 60)),
-    s: clampUnit(s % 60),
-  };
+  return { h: clampUnit(Math.floor(s / 3600)), m: clampUnit(Math.floor((s % 3600) / 60)), s: clampUnit(s % 60) };
 };
-
 const toSeconds = ({ h, m, s }) => h * 3600 + m * 60 + s;
 
-// reuses your own drain-animation stops as the color lookup table
 const colorStops = [
   { at: 100, color: [31, 255, 31] },
   { at: 70, color: [248, 255, 34] },
   { at: 33, color: [255, 168, 28] },
   { at: 0, color: [255, 23, 23] },
 ];
-
 function getBarColor(percent) {
   const p = Math.max(0, Math.min(100, percent));
   for (let i = 0; i < colorStops.length - 1; i++) {
-    const a = colorStops[i];
-    const b = colorStops[i + 1];
+    const a = colorStops[i], b = colorStops[i + 1];
     if (p <= a.at && p >= b.at) {
-      const range = a.at - b.at || 1;
-      const t = (a.at - p) / range;
+      const t = (a.at - p) / (a.at - b.at || 1);
       const mix = a.color.map((c, idx) => Math.round(c + (b.color[idx] - c) * t));
       return `rgb(${mix[0]}, ${mix[1]}, ${mix[2]})`;
     }
   }
-  return `rgb(${colorStops[colorStops.length - 1].color.join(", ")})`;
+  return `rgb(${colorStops.at(-1).color.join(", ")})`;
 }
 
-// ---------- TimeUnit: one clickable/scrollable H, M, or S box ----------
+// ---------- priority config (Feature 2) ----------
+const PRIORITY_CONFIG = {
+  basic: { label: "Basic", color: "156, 156, 156", flash: false, speed: null },
+  normal: { label: "Normal", color: "34, 197, 94", flash: true, speed: "2.2s" },
+  moderate: { label: "Moderate", color: "234, 179, 8", flash: true, speed: "1.1s" },
+  severe: { label: "Severe", color: "239, 68, 68", flash: true, speed: "0.45s" },
+};
+
+function PriorityIndicator({ priority }) {
+  const cfg = PRIORITY_CONFIG[priority] || PRIORITY_CONFIG.basic;
+  return (
+    <div className="flex items-center gap-2">
+      <span
+        className="inline-block w-2.5 h-2.5 rounded-full"
+        style={{
+          backgroundColor: `rgb(${cfg.color})`,
+          animation: cfg.flash ? `priorityPulse ${cfg.speed} ease-in-out infinite` : "none",
+        }}
+      />
+      <span className="text-xs font-semibold uppercase tracking-wide" style={{ color: `rgb(${cfg.color})` }}>
+        {cfg.label}
+      </span>
+    </div>
+  );
+}
+
+// ---------- TimeUnit / TimeInput (unchanged from before) ----------
 function TimeUnit({ value, onChange, disabled }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(String(value).padStart(2, "0"));
-
-  const commit = () => {
-    onChange(clampUnit(Number(draft)));
-    setEditing(false);
-  };
+  const commit = () => { onChange(clampUnit(Number(draft))); setEditing(false); };
 
   return (
     <div className="flex flex-col items-center gap-1">
-      <button
-        type="button"
-        disabled={disabled}
-        onClick={() => onChange(clampUnit(value + 1))}
-        className="text-zinc-500 hover:text-[rgb(58,255,58)] disabled:opacity-30 disabled:hover:text-zinc-500"
-      >
+      <button type="button" disabled={disabled} onClick={() => onChange(clampUnit(value + 1))}
+        className="text-zinc-500 hover:text-[rgb(58,255,58)] disabled:opacity-30">
         <FontAwesomeIcon icon={faChevronUp} size="xs" />
       </button>
-
       {editing ? (
-        <input
-          autoFocus
-          value={draft}
-          disabled={disabled}
+        <input autoFocus value={draft} disabled={disabled}
           onChange={(e) => setDraft(e.target.value.replace(/\D/g, "").slice(0, 2))}
-          onBlur={commit}
-          onKeyDown={(e) => e.key === "Enter" && commit()}
-          className="w-10 h-8 text-center bg-zinc-900 border border-[rgb(58,255,58)] rounded text-lg outline-none"
-        />
+          onBlur={commit} onKeyDown={(e) => e.key === "Enter" && commit()}
+          className="w-10 h-8 text-center bg-zinc-900 border border-[rgb(58,255,58)] rounded text-lg outline-none" />
       ) : (
-        <button
-          type="button"
-          disabled={disabled}
-          onClick={() => {
-            setDraft(String(value).padStart(2, "0"));
-            setEditing(true);
-          }}
-          className="w-10 h-8 text-center bg-zinc-900 border border-zinc-700 rounded text-lg disabled:opacity-50"
-        >
+        <button type="button" disabled={disabled}
+          onClick={() => { setDraft(String(value).padStart(2, "0")); setEditing(true); }}
+          className="w-10 h-8 text-center bg-zinc-900 border border-zinc-700 rounded text-lg disabled:opacity-50">
           {String(value).padStart(2, "0")}
         </button>
       )}
-
-      <button
-        type="button"
-        disabled={disabled}
-        onClick={() => onChange(clampUnit(value - 1))}
-        className="text-zinc-500 hover:text-[rgb(58,255,58)] disabled:opacity-30 disabled:hover:text-zinc-500"
-      >
+      <button type="button" disabled={disabled} onClick={() => onChange(clampUnit(value - 1))}
+        className="text-zinc-500 hover:text-[rgb(58,255,58)] disabled:opacity-30">
         <FontAwesomeIcon icon={faChevronDown} size="xs" />
       </button>
     </div>
   );
 }
 
-// ---------- TimeInput: H : M : S grouped together ----------
 function TimeInput({ h, m, s, onChange, disabled }) {
   return (
     <div className="flex items-center gap-2 px-3 py-2 bg-zinc-950 border border-zinc-700 rounded-lg">
@@ -121,50 +113,42 @@ function TimeInput({ h, m, s, onChange, disabled }) {
 function EditModal({ task, onSave, onCancel }) {
   const [taskName, setTaskName] = useState(task.Task);
   const [disc, setDisc] = useState(task.Disc);
+  const [priority, setPriority] = useState(task.priority || "basic");
   const [time, setTime] = useState(toHMS(task.remainingAtLastEdit));
 
   const handleSave = () => {
     if (!taskName.trim()) return;
-    onSave({ Task: taskName, Disc: disc, newRemainingSeconds: toSeconds(time) });
+    onSave({ Task: taskName, Disc: disc, priority, newRemainingSeconds: toSeconds(time) });
   };
 
   return (
     <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 px-4">
       <div className="w-full max-w-md bg-zinc-950 border border-zinc-700 rounded-xl p-6 flex flex-col gap-4">
         <h2 className="text-2xl font-bold text-white">Edit task</h2>
+        <input value={taskName} onChange={(e) => setTaskName(e.target.value)}
+          className="h-11 px-3 bg-zinc-900 border border-zinc-700 rounded-lg text-white outline-none focus:border-[rgb(58,255,58)]"
+          placeholder="Task name" />
+        <input value={disc} onChange={(e) => setDisc(e.target.value)}
+          className="h-11 px-3 bg-zinc-900 border border-zinc-700 rounded-lg text-white outline-none focus:border-[rgb(58,255,58)]"
+          placeholder="Description" />
 
-        <input
-          value={taskName}
-          onChange={(e) => setTaskName(e.target.value)}
-          className="h-11 px-3 bg-zinc-900 border border-zinc-700 rounded-lg text-white outline-none focus:border-[rgb(58,255,58)]"
-          placeholder="Task name"
-        />
-        <input
-          value={disc}
-          onChange={(e) => setDisc(e.target.value)}
-          className="h-11 px-3 bg-zinc-900 border border-zinc-700 rounded-lg text-white outline-none focus:border-[rgb(58,255,58)]"
-          placeholder="Description"
-        />
+        <select value={priority} onChange={(e) => setPriority(e.target.value)}
+          className="h-11 px-3 bg-zinc-900 border border-zinc-700 rounded-lg text-white outline-none focus:border-[rgb(58,255,58)]">
+          <option value="basic" style={{ color: "rgb(156,156,156)" }}>Basic</option>
+          <option value="normal" style={{ color: "rgb(34,197,94)" }}>-- Normal</option>
+          <option value="moderate" style={{ color: "rgb(234,179,8)" }}>-- Moderate</option>
+          <option value="severe" style={{ color: "rgb(239,68,68)" }}>-- Severe</option>
+        </select>
 
         <div className="flex justify-center">
           <TimeInput h={time.h} m={time.m} s={time.s} onChange={setTime} />
         </div>
 
         <div className="flex justify-end gap-3 mt-2">
-          <button
-            type="button"
-            onClick={onCancel}
-            className="px-4 py-2 rounded-lg border border-zinc-700 text-zinc-300 hover:bg-zinc-900"
-          >
-            Cancel
-          </button>
-          <button
-            type="button"
-            onClick={handleSave}
-            className="px-4 py-2 rounded-lg bg-[rgb(58,255,58)] text-black font-bold hover:bg-white"
-          >
-            Save changes
-          </button>
+          <button type="button" onClick={onCancel}
+            className="px-4 py-2 rounded-lg border border-zinc-700 text-zinc-300 hover:bg-zinc-900">Cancel</button>
+          <button type="button" onClick={handleSave}
+            className="px-4 py-2 rounded-lg bg-[rgb(58,255,58)] text-black font-bold hover:bg-white">Save changes</button>
         </div>
       </div>
     </div>
@@ -177,28 +161,19 @@ function TaskItem({ task, onDelete, setTaskBoard }) {
   const [showEdit, setShowEdit] = useState(false);
   const intervalRef = useRef(null);
 
-  // live ticking while running
   useEffect(() => {
-    if (task.paused || task.completed) {
-      setDisplayRemaining(task.remainingAtLastEdit);
-      return;
-    }
-
+    if (task.paused || task.completed) { setDisplayRemaining(task.remainingAtLastEdit); return; }
     intervalRef.current = setInterval(() => {
       const elapsed = (Date.now() - task.startedAt) / 1000;
       const remaining = Math.max(0, task.remainingAtLastEdit - elapsed);
       setDisplayRemaining(remaining);
-
       if (remaining <= 0) {
         clearInterval(intervalRef.current);
-        setTaskBoard((prev) =>
-          prev.map((t) =>
-            t.id === task.id ? { ...t, completed: true, paused: true, remainingAtLastEdit: 0 } : t
-          )
-        );
+        setTaskBoard((prev) => prev.map((t) =>
+          t.id === task.id ? { ...t, completed: true, paused: true, remainingAtLastEdit: 0 } : t
+        ));
       }
     }, 200);
-
     return () => clearInterval(intervalRef.current);
   }, [task.paused, task.completed, task.startedAt, task.remainingAtLastEdit, task.id, setTaskBoard]);
 
@@ -206,55 +181,36 @@ function TaskItem({ task, onDelete, setTaskBoard }) {
   const { h, m, s } = toHMS(displayRemaining);
 
   const togglePause = () => {
-    setTaskBoard((prev) =>
-      prev.map((t) => {
-        if (t.id !== task.id) return t;
-        if (t.paused) {
-          // resume: restart the clock from wherever remaining currently sits
-          return { ...t, paused: false, startedAt: Date.now() };
-        }
-        // pause: freeze remaining at its current live value
-        const elapsed = t.startedAt ? (Date.now() - t.startedAt) / 1000 : 0;
-        const remaining = Math.max(0, t.remainingAtLastEdit - elapsed);
-        return { ...t, paused: true, remainingAtLastEdit: remaining, startedAt: null };
-      })
-    );
+    setTaskBoard((prev) => prev.map((t) => {
+      if (t.id !== task.id) return t;
+      if (t.paused) return { ...t, paused: false, startedAt: Date.now() };
+      const elapsed = t.startedAt ? (Date.now() - t.startedAt) / 1000 : 0;
+      const remaining = Math.max(0, t.remainingAtLastEdit - elapsed);
+      return { ...t, paused: true, remainingAtLastEdit: remaining, startedAt: null };
+    }));
   };
 
   const openEdit = () => {
-    // pause first, exactly as the moment we open we want a frozen, accurate remaining value
-    setTaskBoard((prev) =>
-      prev.map((t) => {
-        if (t.id !== task.id) return t;
-        const elapsed = t.startedAt ? (Date.now() - t.startedAt) / 1000 : 0;
-        const remaining = Math.max(0, t.remainingAtLastEdit - elapsed);
-        return { ...t, paused: true, remainingAtLastEdit: remaining, startedAt: null };
-      })
-    );
+    setTaskBoard((prev) => prev.map((t) => {
+      if (t.id !== task.id) return t;
+      const elapsed = t.startedAt ? (Date.now() - t.startedAt) / 1000 : 0;
+      const remaining = Math.max(0, t.remainingAtLastEdit - elapsed);
+      return { ...t, paused: true, remainingAtLastEdit: remaining, startedAt: null };
+    }));
     setShowEdit(true);
   };
 
-  const saveEdit = ({ Task, Disc, newRemainingSeconds }) => {
-    setTaskBoard((prev) =>
-      prev.map((t) => {
-        if (t.id !== task.id) return t;
-
-        const extendsPastOriginal = newRemainingSeconds > t.totalDuration;
-
-        return {
-          ...t,
-          Task,
-          Disc,
-          completed: false,
-          paused: false,
-          startedAt: Date.now(),
-          remainingAtLastEdit: newRemainingSeconds,
-          // fresh bar if the new time exceeds the original total; otherwise
-          // keep the original total so the percent stays proportional
-          totalDuration: extendsPastOriginal ? newRemainingSeconds : t.totalDuration,
-        };
-      })
-    );
+  const saveEdit = ({ Task, Disc, priority, newRemainingSeconds }) => {
+    setTaskBoard((prev) => prev.map((t) => {
+      if (t.id !== task.id) return t;
+      const extendsPastOriginal = newRemainingSeconds > t.totalDuration;
+      return {
+        ...t, Task, Disc, priority,
+        completed: false, paused: false, startedAt: Date.now(),
+        remainingAtLastEdit: newRemainingSeconds,
+        totalDuration: extendsPastOriginal ? newRemainingSeconds : t.totalDuration,
+      };
+    }));
     setShowEdit(false);
   };
 
@@ -262,39 +218,23 @@ function TaskItem({ task, onDelete, setTaskBoard }) {
 
   return (
     <li className="flex justify-between items-center">
-      <div
-        className={`p-5 mb-5 flex flex-col justify-between rounded-md border border-x-white flex-1 transition-colors ${task.completed
-          ? "bg-red-500 text-black"
-          : task.paused
-            ? "bg-zinc-800 text-white grayscale-60"
+      <div className={`p-5 mb-5 flex flex-col justify-between rounded-md border border-x-white flex-1 transition-colors ${task.completed ? "bg-red-500 text-black"
+          : task.paused ? "bg-zinc-800 text-white grayscale-60"
             : "bg-black text-white"
-          }`}
-      >
+        }`}>
         <div className="flex justify-between items-start">
           <div>
             <h4 className="font-bold text-3xl text-wrap">{task.Task}</h4>
-            <p className={`text-xl text-wrap ${task.completed ? "text-black" : "text-stone-500"}`}>
-              {task.Disc}
-            </p>
+            <div className="mt-1"><PriorityIndicator priority={task.priority} /></div>
+            <p className={`text-xl text-wrap mt-1 ${task.completed ? "text-black" : "text-stone-500"}`}>{task.Disc}</p>
           </div>
-
           <div className="flex gap-3 pl-4">
-            <button
-              type="button"
-              onClick={openEdit}
-              disabled={task.completed}
-              className="text-zinc-400 hover:text-[rgb(58,255,58)] disabled:opacity-30"
-              title="Edit"
-            >
+            <button type="button" onClick={openEdit} disabled={task.completed}
+              className="text-zinc-400 hover:text-[rgb(58,255,58)] disabled:opacity-30" title="Edit">
               <FontAwesomeIcon icon={faPen} />
             </button>
-            <button
-              type="button"
-              onClick={togglePause}
-              disabled={task.completed}
-              className="text-zinc-400 hover:text-[rgb(58,255,58)] disabled:opacity-30"
-              title={task.paused ? "Resume" : "Pause"}
-            >
+            <button type="button" onClick={togglePause} disabled={task.completed}
+              className="text-zinc-400 hover:text-[rgb(58,255,58)] disabled:opacity-30" title={task.paused ? "Resume" : "Pause"}>
               <FontAwesomeIcon icon={task.paused ? faPlay : faPause} />
             </button>
           </div>
@@ -306,43 +246,17 @@ function TaskItem({ task, onDelete, setTaskBoard }) {
           </span>
         </div>
 
-        <div
-          className="mt-2"
-          style={{
-            width: "100%",
-            height: "10px",
-            border: "1px solid black",
-            borderRadius: "10px",
-            backgroundColor: "rgb(255, 255, 255)",
-            position: "relative",
-            overflow: "hidden",
-          }}
-        >
-          <div
-            style={{
-              position: "absolute",
-              top: 0,
-              left: 0,
-              height: "100%",
-              width: `${percent}%`,
-              backgroundColor: barColor,
-              borderRadius: "10px",
-              transition: "width 200ms linear, background-color 200ms linear",
-            }}
-          ></div>
+        <div className="mt-2" style={{ width: "100%", height: "10px", border: "1px solid black", borderRadius: "10px", backgroundColor: "rgb(255,255,255)", position: "relative", overflow: "hidden" }}>
+          <div style={{ position: "absolute", top: 0, left: 0, height: "100%", width: `${percent}%`, backgroundColor: barColor, borderRadius: "10px", transition: "width 200ms linear, background-color 200ms linear" }}></div>
         </div>
       </div>
 
-      <button
-        className="w-20 h-12 px-4 py-2 mx-5 bg-red-600 hover:bg-red-800 text-white font-bold rounded-md flex items-center justify-center cursor-pointer"
-        onClick={() => onDelete(task.id)}
-      >
+      <button className="w-20 h-12 px-4 py-2 mx-5 bg-red-600 text-white font-bold rounded-md flex items-center justify-center"
+        onClick={() => onDelete(task.id)}>
         <FontAwesomeIcon icon={faTrash} />
       </button>
 
-      {showEdit && (
-        <EditModal task={task} onSave={saveEdit} onCancel={() => setShowEdit(false)} />
-      )}
+      {showEdit && <EditModal task={task} onSave={saveEdit} onCancel={() => setShowEdit(false)} />}
     </li>
   );
 }
@@ -350,8 +264,76 @@ function TaskItem({ task, onDelete, setTaskBoard }) {
 // ---------- Page ----------
 const Page = () => {
   const [TaskBoard, setTaskBoard] = useState([]);
-  const [input, setInput] = useState({ Task: "", Disc: "" });
+  const [input, setInput] = useState({ Task: "", Disc: "", Priority: "basic" });
   const [time, setTime] = useState({ h: 0, m: 0, s: 0 });
+  const [hasLoaded, setHasLoaded] = useState(false);
+  const taskBoardRef = useRef(TaskBoard); // always-fresh mirror, read inside event listeners
+
+  useEffect(() => { taskBoardRef.current = TaskBoard; }, [TaskBoard]);
+
+  // ---- LOAD (runs once on mount, client-only) ----
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        // Any task that was actively running gets a FRESH anchor at load time.
+        // remainingAtLastEdit already holds the correct frozen value (from pagehide
+        // or the periodic safety-net save) — we just need a new startedAt so the
+        // live countdown resumes from exactly that point, not from whatever time
+        // has passed since the tab was last open.
+        const restored = parsed.map((t) =>
+          !t.paused && !t.completed ? { ...t, startedAt: Date.now() } : t
+        );
+        setTaskBoard(restored);
+      }
+    } catch (err) {
+      console.error("Failed to load saved tasks:", err);
+    } finally {
+      setHasLoaded(true);
+    }
+  }, []);
+
+  // ---- SAVE on every state change (normal case: add/delete/pause/edit/complete) ----
+  useEffect(() => {
+    if (!hasLoaded) return;
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(TaskBoard));
+    } catch (err) {
+      console.error("Failed to save tasks:", err);
+    }
+  }, [TaskBoard, hasLoaded]);
+
+  // ---- Feature 1: freeze + persist on tab/browser close ----
+  useEffect(() => {
+    const freezeAndSave = () => {
+      const frozen = taskBoardRef.current.map((t) => {
+        if (t.paused || t.completed || !t.startedAt) return t;
+        const elapsed = (Date.now() - t.startedAt) / 1000;
+        const remaining = Math.max(0, t.remainingAtLastEdit - elapsed);
+        return { ...t, remainingAtLastEdit: remaining, startedAt: Date.now() };
+      });
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(frozen));
+      } catch (err) {
+        console.error("Failed to save on close:", err);
+      }
+    };
+
+    // pagehide is the reliable signal for tab close / browser close / navigation
+    // away — fires more consistently than beforeunload, including on mobile.
+    window.addEventListener("pagehide", freezeAndSave);
+
+    // periodic safety net: bounds the worst-case data-loss window to a few
+    // seconds even in the one case no JS event can catch — a genuine forced
+    // power-off or crash, where nothing gets a chance to run at all.
+    const safetyInterval = setInterval(freezeAndSave, 5000);
+
+    return () => {
+      window.removeEventListener("pagehide", freezeAndSave);
+      clearInterval(safetyInterval);
+    };
+  }, []);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -365,7 +347,6 @@ const Page = () => {
   const onSubmit = (e) => {
     e.preventDefault();
     if (!input.Task.trim()) return;
-
     const totalSeconds = toSeconds(time);
     if (totalSeconds <= 0) return;
 
@@ -375,6 +356,7 @@ const Page = () => {
         id: Date.now(),
         Task: input.Task,
         Disc: input.Disc,
+        priority: input.Priority,
         totalDuration: totalSeconds,
         remainingAtLastEdit: totalSeconds,
         startedAt: Date.now(),
@@ -383,47 +365,32 @@ const Page = () => {
       },
     ]);
 
-    setInput({ Task: "", Disc: "" });
+    setInput({ Task: "", Disc: "", Priority: "basic" });
     setTime({ h: 0, m: 0, s: 0 });
   };
 
   return (
     <>
-      <h1 className="w-full bg-black text-gray-200 text-4xl text-center p-5 font-bold">
-        TASKBOARD
-      </h1>
+      <h1 className="w-full bg-black text-white text-4xl text-center p-5 font-bold">TASKBOARD</h1>
       <hr className="border-gray-700" />
 
-      <form
-        onSubmit={onSubmit}
-        className="w-full flex flex-col md:flex-row items-stretch md:items-center gap-3 px-6 py-5 bg-zinc-950 border-b border-zinc-800"
-      >
-        <input
-          type="text"
-          name="Task"
-          placeholder="Task name"
-          value={input.Task}
-          onChange={handleChange}
-          className="flex-1 min-w-0 h-12 px-4 bg-zinc-900 border border-zinc-700 rounded-lg text-lg  text-gray-200  placeholder-zinc-500 outline-none transition-colors focus:border-[rgb(58,255,58)]"
-        />
-        
-        <input
-          type="text"
-          name="Disc"
-          placeholder="Description"
-          value={input.Disc}
-          onChange={handleChange}
-          className="flex-1 min-w-0 h-12 px-4 bg-zinc-900 border border-zinc-700 rounded-lg text-lg  text-gray-200  placeholder-zinc-500 outline-none transition-colors focus:border-[rgb(58,255,58)]"
-        />
+      <form onSubmit={onSubmit} className="w-full flex flex-col md:flex-row items-stretch md:items-center gap-3 px-6 py-5 bg-zinc-950 border-b border-zinc-800">
+        <input type="text" name="Task" placeholder="Task name" value={input.Task} onChange={handleChange}
+          className="flex-1 min-w-0 h-12 px-4 bg-zinc-900 border border-zinc-700 rounded-lg text-lg text-white placeholder-zinc-500 outline-none focus:border-[rgb(58,255,58)]" />
+        <input type="text" name="Disc" placeholder="Description" value={input.Disc} onChange={handleChange}
+          className="flex-1 min-w-0 h-12 px-4 bg-zinc-900 border border-zinc-700 rounded-lg text-lg text-white placeholder-zinc-500 outline-none focus:border-[rgb(58,255,58)]" />
+
+        <select name="Priority" value={input.Priority} onChange={handleChange}
+          className="h-12 px-4 bg-zinc-900 border border-zinc-700 rounded-lg text-lg text-white outline-none focus:border-[rgb(58,255,58)]">
+          <option value="basic" style={{ color: "rgb(156,156,156)" }}>Basic</option>
+          <option value="normal" style={{ color: "rgb(34,197,94)" }}>-- Normal</option>
+          <option value="moderate" style={{ color: "rgb(234,179,8)" }}>-- Moderate</option>
+          <option value="severe" style={{ color: "rgb(239,68,68)" }}>-- Severe</option>
+        </select>
 
         <TimeInput h={time.h} m={time.m} s={time.s} onChange={setTime} />
 
-        <button
-          type="submit"
-          className="h-12 px-6 bg-[rgb(0,184,0)] text-black text-lg font-bold rounded-lg transition-colors hover:bg-[rgb(0,77,0)]"
-        >
-          Add task
-        </button>
+        <button type="submit" className="h-12 px-6 bg-[rgb(58,255,58)] text-black text-lg font-bold rounded-lg hover:bg-white">Add task</button>
       </form>
 
       <hr className="border-gray-700" />
