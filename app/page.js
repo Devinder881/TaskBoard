@@ -8,6 +8,8 @@ import {
   faChevronUp,
   faChevronDown,
   faTrash,
+  faRotateRight,
+  faCheck,
 } from "@fortawesome/free-solid-svg-icons";
 
 const STORAGE_KEY = "taskboard-tasks";
@@ -26,16 +28,27 @@ const colorStops = [
   { at: 33, color: [255, 168, 28] },
   { at: 0, color: [255, 23, 23] },
 ];
+
+
 function getBarColor(percent) {
   const p = Math.max(0, Math.min(100, percent));
+
   for (let i = 0; i < colorStops.length - 1; i++) {
-    const a = colorStops[i], b = colorStops[i + 1];
+
+    const a = colorStops[i];
+    const b = colorStops[i + 1];
+
     if (p <= a.at && p >= b.at) {
       const t = (a.at - p) / (a.at - b.at || 1);
-      const mix = a.color.map((c, idx) => Math.round(c + (b.color[idx] - c) * t));
+
+      const mix = a.color.map((c, idx) =>
+        Math.round(c + (b.color[idx] - c) * t)
+      );
+
       return `rgb(${mix[0]}, ${mix[1]}, ${mix[2]})`;
     }
   }
+
   return `rgb(${colorStops.at(-1).color.join(", ")})`;
 }
 
@@ -170,7 +183,8 @@ function TaskItem({ task, onDelete, setTaskBoard }) {
       if (remaining <= 0) {
         clearInterval(intervalRef.current);
         setTaskBoard((prev) => prev.map((t) =>
-          t.id === task.id ? { ...t, completed: true, paused: true, remainingAtLastEdit: 0 } : t
+          t.id === task.id ? { ...t, completed: true, paused: true, remainingAtLastEdit: 0, overdue: true } : t
+          //                                                                                  ^^^^^^^^^^^^^ NEW
         ));
       }
     }, 200);
@@ -214,40 +228,97 @@ function TaskItem({ task, onDelete, setTaskBoard }) {
     setShowEdit(false);
   };
 
-  const barColor = task.completed ? "rgb(255, 23, 23)" : getBarColor(percent);
+
+  const completeTask = () => {
+    setTaskBoard((prev) => prev.map((t) =>
+      t.id === task.id ? { ...t, completed: true, paused: true, remainingAtLastEdit: 0, overdue: false } : t
+      //                                                                                  
+    ));
+  };
+
+  const reloadTask = () => {
+    setTaskBoard((prev) => prev.map((t) =>
+      t.id === task.id
+        ? { ...t, completed: false, paused: false, overdue: false, startedAt: Date.now(), remainingAtLastEdit: t.totalDuration }
+        : t
+    ));
+  };
+
+  const barColor = task.overdue ? "rgb(239, 68, 68)" : task.completed ? "rgb(58, 255, 58)" : getBarColor(percent);
+  const cardBg = task.overdue ? "rgb(220, 38, 38)" : task.completed ? "rgb(58, 255, 58)" : task.paused ? "#27272a" : "#000000";
+  const cardText = (task.completed || task.overdue) ? "#000000" : "#ffffff";
+
 
   return (
     <li className="flex justify-between items-center">
-      <div className={`p-5 mb-5 flex flex-col justify-between rounded-md border border-x-white flex-1 transition-colors ${task.completed ? "bg-red-500 text-black"
-          : task.paused ? "bg-zinc-800 text-white grayscale-60"
-            : "bg-black text-white"
-        }`}>
-        <div className="flex justify-between items-start">
-          <div>
-            <h4 className="font-bold text-3xl text-wrap">{task.Task}</h4>
-            <div className="mt-1"><PriorityIndicator priority={task.priority} /></div>
-            <p className={`text-xl text-wrap mt-1 ${task.completed ? "text-black" : "text-stone-500"}`}>{task.Disc}</p>
+      <div className="p-5 mb-5 flex flex-col justify-between rounded-md border border-x-white flex-1 transition-colors"
+        style={{ backgroundColor: cardBg, color: cardText }}>
+
+        <div className="flex justify-between items-start" style={{ backgroundColor: "transparent" }}>
+          <div className="w-full" style={{ backgroundColor: "transparent" }}>
+            <h4 className="font-bold text-3xl text-wrap" style={{ color: cardText, backgroundColor: "transparent" }}>
+              {task.Task}
+            </h4>
+            {!task.completed && !task.overdue && (
+              <div className="mt-1" ><PriorityIndicator priority={task.priority} /></div>
+            )}
+            <p className="w-full text-xl text-wrap mt-1" style={{ color: cardText, backgroundColor: "transparent" }}>
+              {task.Disc}
+            </p>
           </div>
-          <div className="flex gap-3 pl-4">
-            <button type="button" onClick={openEdit} disabled={task.completed}
-              className="text-zinc-400 hover:text-[rgb(58,255,58)] disabled:opacity-30" title="Edit">
-              <FontAwesomeIcon icon={faPen} />
-            </button>
-            <button type="button" onClick={togglePause} disabled={task.completed}
-              className="text-zinc-400 hover:text-[rgb(58,255,58)] disabled:opacity-30" title={task.paused ? "Resume" : "Pause"}>
-              <FontAwesomeIcon icon={task.paused ? faPlay : faPause} />
-            </button>
+
+          <div className="flex gap-3 pl-4" style={{ backgroundColor: "transparent" }}>
+            {task.completed ? (
+              <button
+                type="button"
+                onClick={reloadTask}
+                style={{
+                  color: "black",
+                  backgroundColor: task.overdue ? "rgb(220, 38, 38)" : "rgb(58, 255, 58)",
+                }}
+                className="w-7 h-7 flex items-center justify-center rounded-full"
+                title="Restart task"
+              >
+                <FontAwesomeIcon
+                  icon={faRotateRight}
+                  size="lg"
+                  className="arrow-icon"
+                />
+              </button>
+            ) : (
+              <>
+                <button type="button" onClick={openEdit} className="text-zinc-400 hover:text-[rgb(58,255,58)]" title="Edit">
+                  <FontAwesomeIcon icon={faPen} />
+                </button>
+                <button type="button" onClick={togglePause} className="text-zinc-400 hover:text-[rgb(58,255,58)]" title={task.paused ? "Resume" : "Pause"}>
+                  <FontAwesomeIcon icon={task.paused ? faPlay : faPause} />
+                </button>
+                <button type="button" onClick={completeTask} className="text-zinc-400 hover:text-[#3aff3a]" title="Mark complete">
+                  <FontAwesomeIcon icon={faCheck} />
+                </button>
+              </>
+            )}
           </div>
         </div>
 
-        <div className="flex items-center justify-between mt-2">
-          <span className="text-sm text-zinc-400 font-mono">
+        {/* --- the HH:MM:SS clock display --- */}
+        <div className="flex items-center justify-between mt-2" style={{ backgroundColor: "transparent" }}>
+          <span
+            className="text-sm font-mono"
+            style={{ color: (task.completed || task.overdue) ? "black" : "#a1a1aa", backgroundColor: "transparent" }}
+          >
             {String(h).padStart(2, "0")}:{String(m).padStart(2, "0")}:{String(s).padStart(2, "0")}
           </span>
         </div>
 
         <div className="mt-2" style={{ width: "100%", height: "10px", border: "1px solid black", borderRadius: "10px", backgroundColor: "rgb(255,255,255)", position: "relative", overflow: "hidden" }}>
-          <div style={{ position: "absolute", top: 0, left: 0, height: "100%", width: `${percent}%`, backgroundColor: barColor, borderRadius: "10px", transition: "width 200ms linear, background-color 200ms linear" }}></div>
+          <div style={{
+            position: "absolute", top: 0, left: 0, height: "100%",
+            width: (task.completed || task.overdue) ? "100%" : `${percent}%`,
+            backgroundColor: task.overdue ? "rgb(220,38,38)" : task.completed ? "rgb(58,255,58)" : getBarColor(percent),
+            borderRadius: "10px",
+            transition: "width 200ms linear, background-color 200ms linear",
+          }}></div>
         </div>
       </div>
 
@@ -258,6 +329,7 @@ function TaskItem({ task, onDelete, setTaskBoard }) {
 
       {showEdit && <EditModal task={task} onSave={saveEdit} onCancel={() => setShowEdit(false)} />}
     </li>
+
   );
 }
 

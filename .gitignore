@@ -34,4 +34,4 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
-README_to_me.md
+README_FOR_ME.md

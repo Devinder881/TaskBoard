@@ -12,6 +12,19 @@
   }
 }
 
+.arrow-icon {
+  color: #000 !important;
+  fill: #000 !important;
+  background-color: transparent !important;
+  cursor: pointer;
+}
+
+.arrow-icon path {
+  fill: #000 !important;
+}
+.arrow-icon:hover {
+  color: white;
+}
 @keyframes drain {
   0% {
     width: 100%;
@@ -32,6 +45,13 @@
 }
 
 @keyframes priorityPulse {
-  0%, 100% { opacity: 1; transform: scale(1); }
-  50% { opacity: 0.35; transform: scale(0.85); }
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.35;
+    transform: scale(0.85);
+  }
 }
