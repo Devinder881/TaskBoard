@@ -11,16 +11,25 @@ import {
   faRotateRight,
   faCheck,
 } from "@fortawesome/free-solid-svg-icons";
+import { playSound, playRandomSound } from "./utils/playSound";
 
 const STORAGE_KEY = "taskboard-tasks";
 
 // ---------- time helpers ----------
 const clampUnit = (n) => Math.min(59, Math.max(0, Number.isNaN(n) ? 0 : n));
-const toHMS = (totalSeconds) => {
+const clampHour = (n) => Math.min(23, Math.max(0, Number.isNaN(n) ? 0 : n));
+const clampDay = (n) => Math.min(365, Math.max(0, Number.isNaN(n) ? 0 : n));
+const toDHMS = (totalSeconds) => {
   const s = Math.max(0, Math.floor(totalSeconds));
-  return { h: clampUnit(Math.floor(s / 3600)), m: clampUnit(Math.floor((s % 3600) / 60)), s: clampUnit(s % 60) };
+  return {
+    d: clampDay(Math.floor(s / 86400)),
+    h: clampHour(Math.floor((s % 86400) / 3600)),
+    m: clampUnit(Math.floor((s % 3600) / 60)),
+    s: clampUnit(s % 60),
+  };
 };
-const toSeconds = ({ h, m, s }) => h * 3600 + m * 60 + s;
+
+const toSeconds = ({ d, h, m, s }) => d * 86400 + h * 3600 + m * 60 + s;
 
 const colorStops = [
   { at: 100, color: [31, 255, 31] },
@@ -60,10 +69,12 @@ const PRIORITY_CONFIG = {
   severe: { label: "Severe", color: "239, 68, 68", flash: true, speed: "0.45s" },
 };
 
-function PriorityIndicator({ priority }) {
+function PriorityIndicator({ priority, paused }) {
   const cfg = PRIORITY_CONFIG[priority] || PRIORITY_CONFIG.basic;
+  const bgColor = paused ? "#27272a" : ""
   return (
-    <div className="flex items-center gap-2">
+    <div className='flex items-center gap-2 transition-colors duration-150'
+      style={{ backgroundColor: bgColor }}>
       <span
         className="inline-block w-2.5 h-2.5 rounded-full"
         style={{
@@ -71,7 +82,7 @@ function PriorityIndicator({ priority }) {
           animation: cfg.flash ? `priorityPulse ${cfg.speed} ease-in-out infinite` : "none",
         }}
       />
-      <span className="text-xs font-semibold uppercase tracking-wide" style={{ color: `rgb(${cfg.color})` }}>
+      <span className="text-xs bg-transparent font-semibold uppercase tracking-wide" style={{ color: `rgb(${cfg.color})` }}>
         {cfg.label}
       </span>
     </div>
@@ -79,30 +90,32 @@ function PriorityIndicator({ priority }) {
 }
 
 // ---------- TimeUnit / TimeInput (unchanged from before) ----------
-function TimeUnit({ value, onChange, disabled }) {
+function TimeUnit({ value, onChange, disabled, max = 59, digits = 2 }) {
   const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState(String(value).padStart(2, "0"));
-  const commit = () => { onChange(clampUnit(Number(draft))); setEditing(false); };
+  const [draft, setDraft] = useState(String(value).padStart(digits, "0"));
+  const clamp = (n) => Math.min(max, Math.max(0, Number.isNaN(n) ? 0 : n));
+  const commit = () => { onChange(clamp(Number(draft))); setEditing(false); };
+  const widthClass = digits === 3 ? "w-14" : "w-10";
 
   return (
     <div className="flex flex-col items-center gap-1">
-      <button type="button" disabled={disabled} onClick={() => onChange(clampUnit(value + 1))}
+      <button type="button" disabled={disabled} onClick={() => onChange(clamp(value + 1))}
         className="text-zinc-500 hover:text-[rgb(58,255,58)] disabled:opacity-30">
         <FontAwesomeIcon icon={faChevronUp} size="xs" />
       </button>
       {editing ? (
         <input autoFocus value={draft} disabled={disabled}
-          onChange={(e) => setDraft(e.target.value.replace(/\D/g, "").slice(0, 2))}
+          onChange={(e) => setDraft(e.target.value.replace(/\D/g, "").slice(0, digits))}
           onBlur={commit} onKeyDown={(e) => e.key === "Enter" && commit()}
-          className="w-10 h-8 text-center bg-zinc-900 border border-[rgb(58,255,58)] rounded text-lg outline-none" />
+          className={`${widthClass} h-8 text-center bg-zinc-900 border border-[rgb(58,255,58)] rounded text-lg outline-none`} />
       ) : (
         <button type="button" disabled={disabled}
-          onClick={() => { setDraft(String(value).padStart(2, "0")); setEditing(true); }}
-          className="w-10 h-8 text-center bg-zinc-900 border border-zinc-700 rounded text-lg disabled:opacity-50">
-          {String(value).padStart(2, "0")}
+          onClick={() => { setDraft(String(value).padStart(digits, "0")); setEditing(true); }}
+          className={`${widthClass} h-8 text-center bg-zinc-900 border border-zinc-700 rounded text-lg disabled:opacity-50`}>
+          {String(value).padStart(digits, "0")}
         </button>
       )}
-      <button type="button" disabled={disabled} onClick={() => onChange(clampUnit(value - 1))}
+      <button type="button" disabled={disabled} onClick={() => onChange(clamp(value - 1))}
         className="text-zinc-500 hover:text-[rgb(58,255,58)] disabled:opacity-30">
         <FontAwesomeIcon icon={faChevronDown} size="xs" />
       </button>
@@ -110,14 +123,16 @@ function TimeUnit({ value, onChange, disabled }) {
   );
 }
 
-function TimeInput({ h, m, s, onChange, disabled }) {
+function TimeInput({ d, h, m, s, onChange, disabled }) {
   return (
     <div className="flex items-center gap-2 px-3 py-2 bg-zinc-950 border border-zinc-700 rounded-lg">
-      <TimeUnit value={h} disabled={disabled} onChange={(v) => onChange({ h: v, m, s })} />
+      <TimeUnit value={d} max={365} digits={3} disabled={disabled} onChange={(v) => onChange({ d: v, h, m, s })} />
       <span className="text-zinc-600 text-xl pb-6">:</span>
-      <TimeUnit value={m} disabled={disabled} onChange={(v) => onChange({ h, m: v, s })} />
+      <TimeUnit value={h} max={23} disabled={disabled} onChange={(v) => onChange({ d, h: v, m, s })} />
       <span className="text-zinc-600 text-xl pb-6">:</span>
-      <TimeUnit value={s} disabled={disabled} onChange={(v) => onChange({ h, m, s: v })} />
+      <TimeUnit value={m} disabled={disabled} onChange={(v) => onChange({ d, h, m: v, s })} />
+      <span className="text-zinc-600 text-xl pb-6">:</span>
+      <TimeUnit value={s} disabled={disabled} onChange={(v) => onChange({ d, h, m, s: v })} />
     </div>
   );
 }
@@ -127,7 +142,7 @@ function EditModal({ task, onSave, onCancel }) {
   const [taskName, setTaskName] = useState(task.Task);
   const [disc, setDisc] = useState(task.Disc);
   const [priority, setPriority] = useState(task.priority || "basic");
-  const [time, setTime] = useState(toHMS(task.remainingAtLastEdit));
+  const [time, setTime] = useState(toDHMS(task.remainingAtLastEdit));
 
   const handleSave = () => {
     if (!taskName.trim()) return;
@@ -154,7 +169,7 @@ function EditModal({ task, onSave, onCancel }) {
         </select>
 
         <div className="flex justify-center">
-          <TimeInput h={time.h} m={time.m} s={time.s} onChange={setTime} />
+          <TimeInput d={time.d} h={time.h} m={time.m} s={time.s} onChange={setTime} />
         </div>
 
         <div className="flex justify-end gap-3 mt-2">
@@ -173,6 +188,7 @@ function TaskItem({ task, onDelete, setTaskBoard }) {
   const [displayRemaining, setDisplayRemaining] = useState(task.remainingAtLastEdit);
   const [showEdit, setShowEdit] = useState(false);
   const intervalRef = useRef(null);
+  const prevStateRef = useRef({ paused: task.paused, completed: task.completed, overdue: task.overdue });
 
   useEffect(() => {
     if (task.paused || task.completed) { setDisplayRemaining(task.remainingAtLastEdit); return; }
@@ -191,8 +207,26 @@ function TaskItem({ task, onDelete, setTaskBoard }) {
     return () => clearInterval(intervalRef.current);
   }, [task.paused, task.completed, task.startedAt, task.remainingAtLastEdit, task.id, setTaskBoard]);
 
+
+  useEffect(() => {
+    const prev = prevStateRef.current;
+
+    if (task.overdue && !prev.overdue) {
+      playRandomSound("overdue");
+    } else if (task.completed && !task.overdue && !prev.completed) {
+      playRandomSound("complete");
+    } else if (task.paused && !prev.paused) {
+      playSound("/sounds/play-n-pause.mp3");
+    } else if (!task.paused && prev.paused && !task.completed) {
+      playSound("/sounds/play-n-pause.mp3");
+    }
+
+    prevStateRef.current = { paused: task.paused, completed: task.completed, overdue: task.overdue };
+  }, [task.paused, task.completed, task.overdue]);
+
+
   const percent = task.totalDuration > 0 ? (displayRemaining / task.totalDuration) * 100 : 0;
-  const { h, m, s } = toHMS(displayRemaining);
+  const { d, h, m, s } = toDHMS(displayRemaining);
 
   const togglePause = () => {
     setTaskBoard((prev) => prev.map((t) => {
@@ -249,6 +283,7 @@ function TaskItem({ task, onDelete, setTaskBoard }) {
   const cardText = (task.completed || task.overdue) ? "#000000" : "#ffffff";
 
 
+
   return (
     <li className="flex justify-between items-center">
       <div className="p-5 mb-5 flex flex-col justify-between rounded-md border border-x-white flex-1 transition-colors"
@@ -260,7 +295,7 @@ function TaskItem({ task, onDelete, setTaskBoard }) {
               {task.Task}
             </h4>
             {!task.completed && !task.overdue && (
-              <div className="mt-1" ><PriorityIndicator priority={task.priority} /></div>
+              <div className="mt-1"><PriorityIndicator priority={task.priority} paused={task.paused} /></div>
             )}
             <p className="w-full text-xl text-wrap mt-1" style={{ color: cardText, backgroundColor: "transparent" }}>
               {task.Disc}
@@ -288,13 +323,13 @@ function TaskItem({ task, onDelete, setTaskBoard }) {
             ) : (
               <>
                 <button type="button" onClick={openEdit} className="text-zinc-400 hover:text-[rgb(58,255,58)]" title="Edit">
-                  <FontAwesomeIcon icon={faPen} />
+                  <FontAwesomeIcon icon={faPen} className="bg-transparent" size="md" />
                 </button>
                 <button type="button" onClick={togglePause} className="text-zinc-400 hover:text-[rgb(58,255,58)]" title={task.paused ? "Resume" : "Pause"}>
-                  <FontAwesomeIcon icon={task.paused ? faPlay : faPause} />
+                  <FontAwesomeIcon icon={task.paused ? faPlay : faPause} className="bg-transparent" size="md" />
                 </button>
                 <button type="button" onClick={completeTask} className="text-zinc-400 hover:text-[#3aff3a]" title="Mark complete">
-                  <FontAwesomeIcon icon={faCheck} />
+                  <FontAwesomeIcon icon={faCheck} className="bg-transparent" size="md" />
                 </button>
               </>
             )}
@@ -307,7 +342,7 @@ function TaskItem({ task, onDelete, setTaskBoard }) {
             className="text-sm font-mono"
             style={{ color: (task.completed || task.overdue) ? "black" : "#a1a1aa", backgroundColor: "transparent" }}
           >
-            {String(h).padStart(2, "0")}:{String(m).padStart(2, "0")}:{String(s).padStart(2, "0")}
+            {String(d).padStart(3, "0")}:{String(h).padStart(2, "0")}:{String(m).padStart(2, "0")}:{String(s).padStart(2, "0")}
           </span>
         </div>
 
@@ -337,7 +372,7 @@ function TaskItem({ task, onDelete, setTaskBoard }) {
 const Page = () => {
   const [TaskBoard, setTaskBoard] = useState([]);
   const [input, setInput] = useState({ Task: "", Disc: "", Priority: "basic" });
-  const [time, setTime] = useState({ h: 0, m: 0, s: 0 });
+  const [time, setTime] = useState({ d: 0, h: 0, m: 0, s: 0 });
   const [hasLoaded, setHasLoaded] = useState(false);
   const taskBoardRef = useRef(TaskBoard); // always-fresh mirror, read inside event listeners
 
@@ -438,7 +473,7 @@ const Page = () => {
     ]);
 
     setInput({ Task: "", Disc: "", Priority: "basic" });
-    setTime({ h: 0, m: 0, s: 0 });
+    setTime({ d: 0, h: 0, m: 0, s: 0 });
   };
 
   return (
@@ -460,7 +495,7 @@ const Page = () => {
           <option value="severe" style={{ color: "rgb(239,68,68)" }}>-- Severe</option>
         </select>
 
-        <TimeInput h={time.h} m={time.m} s={time.s} onChange={setTime} />
+        <TimeInput d={time.d} h={time.h} m={time.m} s={time.s} onChange={setTime} />
 
         <button type="submit" className="h-12 px-6 bg-[rgb(58,255,58)] text-black text-lg font-bold rounded-lg hover:bg-white">Add task</button>
       </form>
