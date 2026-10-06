@@ -13,18 +13,19 @@
 }
 
 .arrow-icon {
-  color: #000 !important;
-  fill: #000 !important;
   background-color: transparent !important;
   cursor: pointer;
 }
 
 .arrow-icon path {
-  fill: #000 !important;
+  fill: #000;
 }
-.arrow-icon:hover {
-  color: white;
+
+button,
+option {
+  cursor: pointer;
 }
+
 @keyframes drain {
   0% {
     width: 100%;
