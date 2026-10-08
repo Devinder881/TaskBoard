@@ -10,12 +10,14 @@ import {
   faTrash,
   faRotateRight,
   faCheck,
+  faEye,
+  faEyeSlash,
 } from "@fortawesome/free-solid-svg-icons";
 import { playSound, playRandomSound } from "./utils/playSound";
 
 const STORAGE_KEY = "taskboard-tasks";
 
-// ---------- time helpers ----------
+
 const clampUnit = (n) => Math.min(59, Math.max(0, Number.isNaN(n) ? 0 : n));
 const clampHour = (n) => Math.min(23, Math.max(0, Number.isNaN(n) ? 0 : n));
 const clampDay = (n) => Math.min(365, Math.max(0, Number.isNaN(n) ? 0 : n));
@@ -61,13 +63,21 @@ function getBarColor(percent) {
   return `rgb(${colorStops.at(-1).color.join(", ")})`;
 }
 
-// ---------- priority config (Feature 2) ----------
+
 const PRIORITY_CONFIG = {
   basic: { label: "Basic", color: "156, 156, 156", flash: false, speed: null },
   normal: { label: "Normal", color: "34, 197, 94", flash: true, speed: "2.2s" },
   moderate: { label: "Moderate", color: "234, 179, 8", flash: true, speed: "1.1s" },
   severe: { label: "Severe", color: "239, 68, 68", flash: true, speed: "0.45s" },
 };
+
+const FILTER_OPTIONS = [
+  { key: "all", label: "All" },
+  { key: "basic", label: "Basic" },
+  { key: "normal", label: "Normal" },
+  { key: "moderate", label: "Moderate" },
+  { key: "severe", label: "Severe" },
+];
 
 function PriorityIndicator({ priority, paused }) {
   const cfg = PRIORITY_CONFIG[priority] || PRIORITY_CONFIG.basic;
@@ -89,8 +99,8 @@ function PriorityIndicator({ priority, paused }) {
   );
 }
 
-// ---------- TimeUnit / TimeInput (unchanged from before) ----------
-function TimeUnit({ value, onChange, disabled, max = 59, digits = 2 }) {
+
+function TimeUnit({ value, uName, onChange, disabled, max = 59, digits = 2 }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(String(value).padStart(digits, "0"));
   const clamp = (n) => Math.min(max, Math.max(0, Number.isNaN(n) ? 0 : n));
@@ -103,6 +113,7 @@ function TimeUnit({ value, onChange, disabled, max = 59, digits = 2 }) {
         className="text-zinc-500 hover:text-[rgb(58,255,58)] disabled:opacity-30">
         <FontAwesomeIcon icon={faChevronUp} size="xs" />
       </button>
+      <div>{uName}</div>
       {editing ? (
         <input autoFocus value={draft} disabled={disabled}
           onChange={(e) => setDraft(e.target.value.replace(/\D/g, "").slice(0, digits))}
@@ -126,18 +137,18 @@ function TimeUnit({ value, onChange, disabled, max = 59, digits = 2 }) {
 function TimeInput({ d, h, m, s, onChange, disabled }) {
   return (
     <div className="flex items-center gap-2 px-3 py-2 bg-zinc-950 border border-zinc-700 rounded-lg">
-      <TimeUnit value={d} max={365} digits={3} disabled={disabled} onChange={(v) => onChange({ d: v, h, m, s })} />
-      <span className="text-zinc-600 text-xl pb-6">:</span>
-      <TimeUnit value={h} max={23} disabled={disabled} onChange={(v) => onChange({ d, h: v, m, s })} />
-      <span className="text-zinc-600 text-xl pb-6">:</span>
-      <TimeUnit value={m} disabled={disabled} onChange={(v) => onChange({ d, h, m: v, s })} />
-      <span className="text-zinc-600 text-xl pb-6">:</span>
-      <TimeUnit value={s} disabled={disabled} onChange={(v) => onChange({ d, h, m, s: v })} />
+      <TimeUnit value={d} uName={'D'} max={365} digits={3} disabled={disabled} onChange={(v) => onChange({ d: v, h, m, s })} />
+
+      <TimeUnit value={h} uName={'H'} max={23} disabled={disabled} onChange={(v) => onChange({ d, h: v, m, s })} />
+
+      <TimeUnit value={m} uName={'M'} disabled={disabled} onChange={(v) => onChange({ d, h, m: v, s })} />
+
+      <TimeUnit value={s} uName={'S'} disabled={disabled} onChange={(v) => onChange({ d, h, m, s: v })} />
     </div>
   );
 }
 
-// ---------- Edit Modal ----------
+
 function EditModal({ task, onSave, onCancel }) {
   const [taskName, setTaskName] = useState(task.Task);
   const [disc, setDisc] = useState(task.Disc);
@@ -156,8 +167,8 @@ function EditModal({ task, onSave, onCancel }) {
         <input value={taskName} onChange={(e) => setTaskName(e.target.value)}
           className="h-11 px-3 bg-zinc-900 border border-zinc-700 rounded-lg text-white outline-none focus:border-[rgb(58,255,58)]"
           placeholder="Task name" />
-        <input value={disc} onChange={(e) => setDisc(e.target.value)}
-          className="h-11 px-3 bg-zinc-900 border border-zinc-700 rounded-lg text-white outline-none focus:border-[rgb(58,255,58)]"
+        <textarea value={disc} onChange={(e) => setDisc(e.target.value)}
+          className="flex-1 min-w-0 h-12 px-4 py-3 bg-zinc-900 border border-zinc-700 rounded-lg text-lg text-white placeholder-zinc-500 outline-none resize-none focus:border-[rgb(58,255,58)] overflow-hidden "
           placeholder="Description" />
 
         <select value={priority} onChange={(e) => setPriority(e.target.value)}
@@ -183,7 +194,7 @@ function EditModal({ task, onSave, onCancel }) {
   );
 }
 
-// ---------- TaskItem ----------
+
 function TaskItem({ task, onDelete, setTaskBoard }) {
   const [displayRemaining, setDisplayRemaining] = useState(task.remainingAtLastEdit);
   const [showEdit, setShowEdit] = useState(false);
@@ -266,7 +277,6 @@ function TaskItem({ task, onDelete, setTaskBoard }) {
   const completeTask = () => {
     setTaskBoard((prev) => prev.map((t) =>
       t.id === task.id ? { ...t, completed: true, paused: true, remainingAtLastEdit: 0, overdue: false } : t
-      //                                                                                  
     ));
   };
 
@@ -297,7 +307,10 @@ function TaskItem({ task, onDelete, setTaskBoard }) {
             {!task.completed && !task.overdue && (
               <div className="mt-1"><PriorityIndicator priority={task.priority} paused={task.paused} /></div>
             )}
-            <p className="w-full text-xl text-wrap mt-1" style={{ color: cardText, backgroundColor: "transparent" }}>
+            <p
+              className="w-full text-xl mt-1"
+              style={{ color: cardText, backgroundColor: "transparent", whiteSpace: "pre-wrap" }}
+            >
               {task.Disc}
             </p>
           </div>
@@ -336,7 +349,6 @@ function TaskItem({ task, onDelete, setTaskBoard }) {
           </div>
         </div>
 
-        {/* --- the HH:MM:SS clock display --- */}
         <div className="flex items-center justify-between mt-2" style={{ backgroundColor: "transparent" }}>
           <span
             className="text-sm font-mono"
@@ -358,8 +370,11 @@ function TaskItem({ task, onDelete, setTaskBoard }) {
       </div>
 
       <button className="w-20 h-12 px-4 py-2 mx-5 bg-red-600 text-white font-bold rounded-md flex items-center justify-center"
-        onClick={() => onDelete(task.id)}>
-        <FontAwesomeIcon icon={faTrash} />
+        onClick={() => {
+          onDelete(task.id);
+          playSound("/sounds/play-n-pause.mp3");
+        }}>
+        <FontAwesomeIcon className="bg-transparent" icon={faTrash} />
       </button>
 
       {showEdit && <EditModal task={task} onSave={saveEdit} onCancel={() => setShowEdit(false)} />}
@@ -368,27 +383,25 @@ function TaskItem({ task, onDelete, setTaskBoard }) {
   );
 }
 
-// ---------- Page ----------
+
 const Page = () => {
   const [TaskBoard, setTaskBoard] = useState([]);
   const [input, setInput] = useState({ Task: "", Disc: "", Priority: "basic" });
   const [time, setTime] = useState({ d: 0, h: 0, m: 0, s: 0 });
   const [hasLoaded, setHasLoaded] = useState(false);
-  const taskBoardRef = useRef(TaskBoard); // always-fresh mirror, read inside event listeners
+  const taskBoardRef = useRef(TaskBoard);
+  const [formVisible, setFormVisible] = useState(true);
+  const [priorityFilter, setPriorityFilter] = useState("all");
+
+
+
 
   useEffect(() => { taskBoardRef.current = TaskBoard; }, [TaskBoard]);
-
-  // ---- LOAD (runs once on mount, client-only) ----
   useEffect(() => {
     try {
       const saved = localStorage.getItem(STORAGE_KEY);
       if (saved) {
         const parsed = JSON.parse(saved);
-        // Any task that was actively running gets a FRESH anchor at load time.
-        // remainingAtLastEdit already holds the correct frozen value (from pagehide
-        // or the periodic safety-net save) — we just need a new startedAt so the
-        // live countdown resumes from exactly that point, not from whatever time
-        // has passed since the tab was last open.
         const restored = parsed.map((t) =>
           !t.paused && !t.completed ? { ...t, startedAt: Date.now() } : t
         );
@@ -401,7 +414,7 @@ const Page = () => {
     }
   }, []);
 
-  // ---- SAVE on every state change (normal case: add/delete/pause/edit/complete) ----
+
   useEffect(() => {
     if (!hasLoaded) return;
     try {
@@ -411,7 +424,7 @@ const Page = () => {
     }
   }, [TaskBoard, hasLoaded]);
 
-  // ---- Feature 1: freeze + persist on tab/browser close ----
+
   useEffect(() => {
     const freezeAndSave = () => {
       const frozen = taskBoardRef.current.map((t) => {
@@ -427,13 +440,8 @@ const Page = () => {
       }
     };
 
-    // pagehide is the reliable signal for tab close / browser close / navigation
-    // away — fires more consistently than beforeunload, including on mobile.
     window.addEventListener("pagehide", freezeAndSave);
 
-    // periodic safety net: bounds the worst-case data-loss window to a few
-    // seconds even in the one case no JS event can catch — a genuine forced
-    // power-off or crash, where nothing gets a chance to run at all.
     const safetyInterval = setInterval(freezeAndSave, 5000);
 
     return () => {
@@ -471,43 +479,138 @@ const Page = () => {
         completed: false,
       },
     ]);
+    playSound("/sounds/play-n-pause.mp3");
 
     setInput({ Task: "", Disc: "", Priority: "basic" });
     setTime({ d: 0, h: 0, m: 0, s: 0 });
   };
+
+
+  const visibleTasks =
+    priorityFilter === "all"
+      ? TaskBoard
+      : TaskBoard.filter((task) => (task.priority || "basic") === priorityFilter);
+
+  const counts = TaskBoard.reduce(
+    (acc, task) => {
+      const key = task.priority || "basic";
+      acc[key] = (acc[key] || 0) + 1;
+      return acc;
+    },
+    { all: TaskBoard.length }
+  );
 
   return (
     <>
       <h1 className="w-full bg-black text-white text-4xl text-center p-5 font-bold">TASKBOARD</h1>
       <hr className="border-gray-700" />
 
-      <form onSubmit={onSubmit} className="w-full flex flex-col md:flex-row items-stretch md:items-center gap-3 px-6 py-5 bg-zinc-950 border-b border-zinc-800">
-        <input type="text" name="Task" placeholder="Task name" value={input.Task} onChange={handleChange}
-          className="flex-1 min-w-0 h-12 px-4 bg-zinc-900 border border-zinc-700 rounded-lg text-lg text-white placeholder-zinc-500 outline-none focus:border-[rgb(58,255,58)]" />
-        <input type="text" name="Disc" placeholder="Description" value={input.Disc} onChange={handleChange}
-          className="flex-1 min-w-0 h-12 px-4 bg-zinc-900 border border-zinc-700 rounded-lg text-lg text-white placeholder-zinc-500 outline-none focus:border-[rgb(58,255,58)]" />
+      <div
+        className="w-full overflow-hidden bg-zinc-950 border-b border-zinc-800 transition-all duration-300 ease-in-out"
+        style={{ height: formVisible ? "auto" : "48px" }}
+      >
+        {formVisible ? (
+          <form
+            onSubmit={onSubmit}
+            className="w-full flex flex-col md:flex-row items-stretch md:items-center gap-3 px-6 py-5"
+          >
+            <input type="text" name="Task" placeholder="Task name" value={input.Task} onChange={handleChange}
+              className="flex-1 min-w-0 h-12 px-4 bg-zinc-900 border border-zinc-700 rounded-b-sm text-lg text-white placeholder-zinc-500 outline-none focus:border-[rgb(58,255,58)]" />
+            <textarea
+              name="Disc"
+              placeholder="Description"
+              value={input.Disc}
+              onChange={handleChange}
+              rows={1}
+              className="flex-1 min-w-0 h-12 px-4 py-3 bg-zinc-900 border border-zinc-700 rounded-lg text-lg text-white placeholder-zinc-500 outline-none resize-none focus:border-[rgb(58,255,58)] overflow-hidden "
+            />
 
-        <select name="Priority" value={input.Priority} onChange={handleChange}
-          className="h-12 px-4 bg-zinc-900 border border-zinc-700 rounded-lg text-lg text-white outline-none focus:border-[rgb(58,255,58)]">
-          <option value="basic" style={{ color: "rgb(156,156,156)" }}>Basic</option>
-          <option value="normal" style={{ color: "rgb(34,197,94)" }}>-- Normal</option>
-          <option value="moderate" style={{ color: "rgb(234,179,8)" }}>-- Moderate</option>
-          <option value="severe" style={{ color: "rgb(239,68,68)" }}>-- Severe</option>
-        </select>
+            <select name="Priority" value={input.Priority} onChange={handleChange}
+              className="h-12 px-4 bg-zinc-900 border border-zinc-700 rounded-b-sm text-lg text-white outline-none focus:border-[rgb(58,255,58)]">
+              <option value="basic" style={{ color: "rgb(156,156,156)" }}>Basic</option>
+              <option value="normal" style={{ color: "rgb(34,197,94)" }}>Normal</option>
+              <option value="moderate" style={{ color: "rgb(234,179,8)" }}>Moderate</option>
+              <option value="severe" style={{ color: "rgb(239,68,68)" }}>Severe</option>
+            </select>
 
-        <TimeInput d={time.d} h={time.h} m={time.m} s={time.s} onChange={setTime} />
+            <TimeInput d={time.d} h={time.h} m={time.m} s={time.s} onChange={setTime} />
 
-        <button type="submit" className="h-12 px-6 bg-[rgb(58,255,58)] text-black text-lg font-bold rounded-lg hover:bg-white">Add task</button>
-      </form>
+            <button type="submit" className="h-12 px-6 bg-[rgb(58,255,58)] text-black text-lg font-bold rounded-lg hover:bg-white">
+              Add task
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                setFormVisible(false)
+                playSound("/sounds/play-n-pause.mp3")
+              }}
+              className="h-12 w-12 flex items-center justify-center text-zinc-400 hover:text-[rgb(58,255,58)]"
+              title="Hide form"
+            >
+              <FontAwesomeIcon icon={faEye} />
+            </button>
+          </form>
+        ) : (
+          <div className="w-full h-10 flex items-center justify-center">
+            <button
+              type="button"
+              onClick={() => {
+                setFormVisible(true);
+                playSound("/sounds/play-n-pause.mp3");
+              }}
+              className="h-12 w-12 flex items-center justify-center text-zinc-400 hover:text-[rgb(58,255,58)]"
+              title="Show form"
+            >
+              <FontAwesomeIcon icon={faEyeSlash} />
+            </button>
+          </div>
+        )}
+      </div >
+
+
 
       <hr className="border-gray-700" />
 
       <div className="p-8 bg-black text-white">
+
+        <div className="flex flex-wrap justify-end gap-2 mb-6">
+          {FILTER_OPTIONS.map(({ key, label }) => {
+            const isActive = priorityFilter === key;
+            const color = key === "all" ? "58, 255, 58" : PRIORITY_CONFIG[key].color;
+
+            return (
+              <button
+                key={key}
+                type="button"
+                onClick={() => setPriorityFilter(key)}
+                className="px-4 py-1.5 rounded-lg border text-base font-semibold transition-colors"
+                style={{
+                  color: isActive ? "#000000" : `rgb(${color})`,
+                  backgroundColor: isActive ? `rgb(${color})` : "transparent",
+                  borderColor: `rgb(${color})`,
+                }}
+              >
+                {label} <span style={{
+                  color: isActive ? "#000000" : `rgb(${color})`,
+                  backgroundColor: "transparent",
+                  opacity: isActive ? 1 : 0.8,
+                  marginLeft: '10px',
+                  transition: "all 0.3s ease"
+                }}>
+                  {counts[key] || 0}</span>
+              </button>
+            );
+          })}
+        </div>
+
         <ul>
           {TaskBoard.length === 0 ? (
             <h3 className="h-screen">No Task Available Yet!</h3>
+          ) : visibleTasks.length === 0 ? (
+            <h3 className="py-10 text-zinc-500">No {priorityFilter} tasks right now.</h3>
           ) : (
-            TaskBoard.map((task) => (
+            visibleTasks.map((task) => (
               <TaskItem key={task.id} task={task} onDelete={deleteHandler} setTaskBoard={setTaskBoard} />
             ))
           )}
